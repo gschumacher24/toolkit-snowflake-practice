@@ -1,0 +1,42 @@
+name: Data Generation Tool
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 23 * * *" # Runs every day at 11:00 p.m.
+
+defaults:
+  run:
+    working-directory: data-generation
+
+env:
+  TOOLKIT_AUTH_TOKEN: ${{ secrets.toolkit_auth_token }}
+  SNOWFLAKE_URL: ${{ secrets.snowflake_url }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run common setup
+        uses: ./.github/actions/common-setup
+        with:
+          toolkit_cli_download_token: ${{ secrets.toolkit_cli_download_token }}
+          toolkit_cli_version: ${{ vars.toolkit_cli_version }}
+          snowflake_private_key_pem: ${{ secrets.snowflake_private_key_pem }}
+
+      - name: Add data to snowflake
+        run: toolkit datagen jdbc snowflake specs/advanced-snowflake-spec.yaml --append
+
+      - name: Generate report
+        run: toolkit datagen show specs/advanced-snowflake-spec.yaml --output=datagen-report.html
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: datagen-report
+          path: data-generation/datagen-report.html
+          if-no-files-found: error

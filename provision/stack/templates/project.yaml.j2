@@ -1,0 +1,184 @@
+databases:
+  - name: {{ name }}
+    properties:
+      comment: The database for the {{ name }} project
+
+
+schemas:
+  - database: {{ name }}
+    name: raw
+    properties:
+      comment: This schema contains raw data without any transformations.
+  - database: {{ name }}
+    name: standardized
+    properties:
+      comment: This schema provides data for exploration and building use cases.
+  - database: {{ name }}
+    name: conformed
+    properties:
+      comment: This schema provides curated data that has been transformed to meet specific business requirements.
+
+{% set schemas = ['raw', 'standardized', 'conformed'] %}
+
+# todo make this an external stage using a storage integration
+stages:
+  - database: {{ name }}
+    schema: raw
+    name: ingest
+    properties:
+      comment: The stage containing files to ingest into the raw layer.
+
+
+roles:
+  - name: {{ name }}_admin
+    properties:
+      comment: The admin role for the {{ name }} project
+  - name: {{ name }}_rw
+    properties:
+      comment: The read-write role for the {{ name }} project
+  - name: {{ name }}_ro
+    properties:
+      comment: The read-only role for the {{ name }} project
+
+roleGrants:
+  - name: {{ name }}_ro
+    toRoles:
+      - {{ name }}_rw
+  - name: {{ name }}_rw
+    toRoles:
+      - {{ name }}_admin
+  - name: {{ name }}_admin
+    toRoles:
+      - sysadmin
+
+# The admin role inherits the read-write role privileges, which inherits the read-only role privileges, so we only
+# need to grant each role the individual privileges it needs beyond the lower roles.
+privilegeGrants:
+  # read-only role privileges
+  - objectType: database
+    objectName: {{ name }}
+    roleName: {{ name }}_ro
+    privilege: usage
+  - objectType: schema
+    objectName: {{ name }}.standardized
+    roleName: {{ name }}_ro
+    privilege: usage
+  - objectType: schema
+    objectName: {{ name }}.conformed
+    roleName: {{ name }}_ro
+    privilege: usage
+  - objectType: tables
+    objectName: schema {{ name }}.standardized
+    roleName: {{ name }}_ro
+    future: true
+    privilege:
+      - select
+  - objectType: tables
+    objectName: schema {{ name }}.conformed
+    roleName: {{ name }}_ro
+    future: true
+    privilege:
+      - select
+  {% if grant_on_all %}
+  - objectType: all tables in schema
+    objectName: {{ name }}.standardized
+    roleName: {{ name }}_ro
+    privilege:
+      - select
+      - insert
+      - update
+      - truncate
+      - delete
+      - evolve schema
+      - references
+  - objectType: all tables in schema
+    objectName: {{ name }}.conformed
+    roleName: {{ name }}_ro
+    privilege:
+      - select
+      - insert
+      - update
+      - truncate
+      - delete
+      - evolve schema
+      - references
+  {% endif %}
+  # read-write role privileges
+  - objectType: database
+    objectName: {{ name }}
+    roleName: {{ name }}_rw
+    privilege: monitor
+  - objectType: database
+    objectName: {{ name }}
+    roleName: {{ name }}_rw
+    privilege: modify
+  - objectType: tables
+    objectName: database {{ name }}
+    roleName: {{ name }}_rw
+    future: true
+    privilege:
+      - select
+      - insert
+      - update
+      - truncate
+      - delete
+      - evolve schema
+      - references
+  {% if grant_on_all %}
+  - objectType: all tables in database
+    objectName: {{ name }}
+    roleName: {{ name }}_rw
+    privilege:
+      - select
+      - insert
+      - update
+      - truncate
+      - delete
+      - evolve schema
+      - references
+  {% endif %}
+  {% for schema in schemas %}
+  - objectType: schema
+    objectName: {{ name }}.{{ schema }}
+    roleName: {{ name }}_rw
+    privilege:
+    - modify
+    - monitor
+    - create table
+    - create dynamic table
+    - create external table
+    - create iceberg table
+    - create view
+    - create materialized view
+    - create task
+    - create alert
+    - create stream
+    - create pipe
+    - create file format
+    - create sequence
+    - create function
+    - create procedure
+    - create stage
+    - create git repository
+  {% endfor %}
+  - objectType: stage
+    objectName: {{ name }}.raw.ingest
+    roleName: {{ name }}_rw
+    privilege:
+    # todo you would grant this on an external stage
+    # - usage
+    - read
+    - write
+  - objectType: tables
+    objectName: database {{ name }}
+    roleName: {{ name }}_admin
+    future: true
+    privilege:
+      - applybudget
+  {% if grant_on_all %}
+  - objectType: all tables in database
+    objectName: {{ name }}
+    roleName: {{ name }}_admin
+    privilege:
+      - applybudget
+  {% endif %}

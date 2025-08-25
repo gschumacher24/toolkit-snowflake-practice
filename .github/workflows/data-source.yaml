@@ -1,0 +1,68 @@
+name: Data Source Tool
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 0 * * *" # Runs every day at midnight UTC
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: data-source
+
+env:
+  TOOLKIT_AUTH_TOKEN: ${{ secrets.toolkit_auth_token }}
+  SNOWFLAKE_URL: ${{ secrets.snowflake_url }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run common setup
+        uses: ./.github/actions/common-setup
+        with:
+          toolkit_cli_download_token: ${{ secrets.toolkit_cli_download_token }}
+          toolkit_cli_version: ${{ vars.toolkit_cli_version }}
+          snowflake_private_key_pem: ${{ secrets.snowflake_private_key_pem }}
+
+      - name: Scan snowflake
+        run: |
+          toolkit ds scan snowflake
+          toolkit ds show snowflake:scan:latest --format html -o reports/scan-report.html
+
+      - name: Profile snowflake
+        run: |
+          toolkit ds profile snowflake:scan:latest
+          toolkit ds show snowflake:profile:latest --format html -o reports/profile-report.html
+
+      - name: Diff snowflake
+        run: |
+          if toolkit ds show snowflake:profile:latest-1 &> /dev/null; then
+            toolkit ds diff snowflake:profile:latest-1 snowflake:profile:latest 
+            toolkit ds show snowflake.snowflake:diff:latest --format html -o reports/diff-report.html
+          fi
+
+      - name: Remove old snapshots
+        run: toolkit admin clean --approve --days=60
+
+      - name: Commit snapshots
+        run: |
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+          git status
+          git add tools
+          git commit -m "Add data source snapshot files - $(date -Iseconds)"
+          git push
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-source-reports
+          path: data-source/reports
+          if-no-files-found: error
