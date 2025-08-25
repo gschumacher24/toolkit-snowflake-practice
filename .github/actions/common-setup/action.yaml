@@ -31,7 +31,7 @@ runs:
     - name: Write Snowflake private key
       shell: bash
       run: |
-        echo ${{ inputs.snowflake_private_key_pem }} > /tmp/snowflake_key.p8
+        (umask  077 ; echo ${{ inputs.snowflake_private_key_pem }} | base64 --decode > /tmp/snowflake_key.p8)
         echo "SNOWFLAKE_PRIVATE_KEY_FILE=/tmp/snowflake_key.p8" >> $GITHUB_ENV
 
     - name: Set up Java
