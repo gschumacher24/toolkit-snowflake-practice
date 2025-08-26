@@ -363,6 +363,7 @@ authenticationPolicies:
         - saml
         - oauth
         - keypair
+        - password
       client_types:
         - drivers
         - snowflake_ui
